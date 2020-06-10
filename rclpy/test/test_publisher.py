@@ -1,4 +1,4 @@
-# Copyright 2017 Open Source Robotics Foundation, Inc.
+# Copyright 2020 Open Source Robotics Foundation, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
 
 import pathlib
 import unittest
+import re
 
-from rclpy.parameter import Parameter
 from test_msgs.msg import BasicTypes
 
 import rclpy
@@ -25,16 +25,17 @@ TEST_NAMESPACE = '/my_publisher_ns'
 
 # TODO Add more topic styles
 TEST_TOPIC = "my_topic"
-TEST_TOPIC_POSITION = "my_topic/position"
-TEST_TOPIC_SPEED = "my_topic/speed"
 
 
-TEST_RESOURCES_DIR = pathlib.Path(__file__).resolve().parent / 'resources' / 'test_node'
+def remote_topic_protocol(topic_name):
+    if not re.match('rostopic://', topic_name):
+        return topic_name
+    return topic_name.lstrip('rostopic://')
 
 
 def full_topic(topic_name):
     if not topic_name:
-        raise(Exception("Invalid topic name, empty!"))
+        raise (Exception("Invalid topic name, empty!"))
     if topic_name[0] == "/":
         return topic_name
 
@@ -48,34 +49,40 @@ class TestPublisher(unittest.TestCase):
         self.context = rclpy.context.Context()
         rclpy.init(context=self.context)
         self.node = rclpy.create_node(
-            TEST_NODE,
-            namespace=TEST_NAMESPACE,
+            'publisher_test_node',
+            # namespace=TEST_NAMESPACE,
             context=self.context,
-            parameter_overrides=[
-                Parameter('initial_foo', Parameter.Type.INTEGER, 4321),
-                Parameter('initial_bar', Parameter.Type.STRING, 'init_param'),
-                Parameter('initial_baz', Parameter.Type.DOUBLE, 3.14)
-            ],
             cli_args=[
-                '--ros-args', '-p', 'initial_fizz:=buzz',
-                '--params-file', str(TEST_RESOURCES_DIR / 'test_parameters.yaml'),
-                '-p', 'initial_buzz:=1.'
+                '--ros-args', '-r', 'publisher_test_topic:=publisher_test_new_topic',
+                '--ros-args', '-r', '{}:={}'.format(TEST_TOPIC, "new_topic"),
             ],
-            automatically_declare_parameters_from_overrides=False
         )
-        self.base_publisher = self.node.create_publisher(BasicTypes, TEST_TOPIC, 0)
-        self.position_publisher = self.node.create_publisher(BasicTypes, TEST_TOPIC_POSITION, 0)
-        self.speed_publisher = self.node.create_publisher(BasicTypes, TEST_TOPIC_SPEED, 0)
+        self.node_with_ns = rclpy.create_node(
+            'publisher_test_node_ns',
+            context=self.context,
+            cli_args=[
+                '--ros-args', '-r', 'publisher_test_topic:=publisher_test_new_topic',
+                '--ros-args', '-r', '{}:={}'.format(TEST_TOPIC, "new_topic"),
+            ],
+        )
 
     @classmethod
     def tearDown(self):
         self.node.destroy_node()
         rclpy.shutdown(context=self.context)
 
+    @classmethod
+    def gen_topic_name_pairs(self):
+        original_topics = ['my_topic', '/my_topic', '/my_ns/my_topic', 'rostopic://my_topic',
+                           'rostopic:///my_ns/my_topic']
+        topic_name_pairs = dict()
+        for original_topic in original_topics:
+            topic_name_pairs[original_topic] = full_topic(original_topic)
+
     def test_resolved_name(self):
-        self.assertEqual(self.base_publisher.resolved_name(), full_topic(TEST_TOPIC))
-        self.assertEqual(self.position_publisher.resolved_name(), full_topic(TEST_TOPIC_POSITION))
-        self.assertEqual(self.speed_publisher.resolved_name(), full_topic(TEST_TOPIC_SPEED))
+        publisher = self.node.create_publisher(BasicTypes, TEST_TOPIC, 0)
+        print(publisher.topic_name, 'vs', full_topic("new_topic"))
+        assert publisher.topic_name == full_topic("new_topic")
 
 
 if __name__ == '__main__':
