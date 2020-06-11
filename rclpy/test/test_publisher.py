@@ -12,77 +12,87 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pathlib
 import unittest
-import re
+import rclpy
 
 from test_msgs.msg import BasicTypes
 
-import rclpy
+TEST_NODE_NAMESPACE = 'test_node_ns'
 
-TEST_NODE = 'my_publisher_node'
-TEST_NAMESPACE = '/my_publisher_ns'
-
-# TODO Add more topic styles
-TEST_TOPIC = "my_topic"
-
-
-def remote_topic_protocol(topic_name):
-    if not re.match('rostopic://', topic_name):
-        return topic_name
-    return topic_name.lstrip('rostopic://')
-
-
-def full_topic(topic_name):
-    if not topic_name:
-        raise (Exception("Invalid topic name, empty!"))
-    if topic_name[0] == "/":
-        return topic_name
-
-    return TEST_NAMESPACE + "/" + topic_name
+TEST_TOPIC = 'my_topic'
+TEST_TOPIC_FROM = 'topic_from'
+TEST_TOPIC_TO = 'topic_to'
 
 
 class TestPublisher(unittest.TestCase):
-
     @classmethod
-    def setUp(self):
-        self.context = rclpy.context.Context()
-        rclpy.init(context=self.context)
-        self.node = rclpy.create_node(
-            'publisher_test_node',
-            # namespace=TEST_NAMESPACE,
-            context=self.context,
+    def setUp(cls):
+        cls.context = rclpy.context.Context()
+        rclpy.init(context=cls.context)
+        cls.node = rclpy.create_node(
+            'node',
+            context=cls.context,
             cli_args=[
-                '--ros-args', '-r', 'publisher_test_topic:=publisher_test_new_topic',
-                '--ros-args', '-r', '{}:={}'.format(TEST_TOPIC, "new_topic"),
+                '--ros-args', '-r', '{}:={}'.format(TEST_TOPIC_FROM, TEST_TOPIC_TO),
             ],
         )
-        self.node_with_ns = rclpy.create_node(
-            'publisher_test_node_ns',
-            context=self.context,
-            cli_args=[
-                '--ros-args', '-r', 'publisher_test_topic:=publisher_test_new_topic',
-                '--ros-args', '-r', '{}:={}'.format(TEST_TOPIC, "new_topic"),
-            ],
+        cls.node_with_ns = rclpy.create_node(
+            'node_withns',
+            context=cls.context,
+            namespace=TEST_NODE_NAMESPACE,
         )
 
     @classmethod
-    def tearDown(self):
-        self.node.destroy_node()
-        rclpy.shutdown(context=self.context)
+    def tearDown(cls):
+        cls.node.destroy_node()
+        cls.node_with_ns.destroy_node()
+        rclpy.shutdown(context=cls.context)
 
     @classmethod
-    def gen_topic_name_pairs(self):
-        original_topics = ['my_topic', '/my_topic', '/my_ns/my_topic', 'rostopic://my_topic',
-                           'rostopic:///my_ns/my_topic']
-        topic_name_pairs = dict()
-        for original_topic in original_topics:
-            topic_name_pairs[original_topic] = full_topic(original_topic)
+    def do_test(cls, test_topics, node):
+        """ Test the topic names of publishers created by the given node
+        The node will create publishers with topic in test_topics, and then test if
+        the publisher's topic_name property is equal to the expected value.
 
-    def test_resolved_name(self):
-        publisher = self.node.create_publisher(BasicTypes, TEST_TOPIC, 0)
-        print(publisher.topic_name, 'vs', full_topic("new_topic"))
-        assert publisher.topic_name == full_topic("new_topic")
+        Args:
+            test_topics: A list of binary tuple in the form (topic, expected topic), the
+            former will be passed to node.create_publisher and the latter will be compared
+            with publisher.topic_name
+            node: The node used to create the publisher. The node's namespace will have
+            an effect on the publisher's topic_name.
+        """
+        for topic_tuple in test_topics:
+            topic, target_topic = topic_tuple
+            publisher = node.create_publisher(BasicTypes, topic, 0)
+            assert publisher.topic_name == target_topic
+            publisher.destroy()
+
+    def test_topic_name(self):
+        test_topics = [
+            (TEST_TOPIC, '/' + TEST_TOPIC),
+            ('/' + TEST_TOPIC, '/' + TEST_TOPIC),
+            ('/my_ns/' + TEST_TOPIC, '/my_ns/' + TEST_TOPIC),
+            ('my_ns/' + TEST_TOPIC, '/my_ns/' + TEST_TOPIC),
+        ]
+        TestPublisher.do_test(test_topics, self.node)
+
+        # topics in a node which has a namespace
+        test_topics = [
+            (TEST_TOPIC, '/' + TEST_NODE_NAMESPACE + '/' + TEST_TOPIC),
+            ('/' + TEST_TOPIC, '/' + TEST_TOPIC),
+            ('/my_ns/' + TEST_TOPIC, '/my_ns/' + TEST_TOPIC),
+            ('my_ns/' + TEST_TOPIC, '/' + TEST_NODE_NAMESPACE + '/my_ns/' + TEST_TOPIC),
+        ]
+        TestPublisher.do_test(test_topics, self.node_with_ns)
+
+    def test_topic_name_remapping(self):
+        test_topics = [
+            (TEST_TOPIC_FROM, '/' + TEST_TOPIC_TO),
+            ('/' + TEST_TOPIC_FROM, '/' + TEST_TOPIC_TO),
+            ('/my_ns/' + TEST_TOPIC_FROM, '/my_ns/' + TEST_TOPIC_FROM),
+            ('my_ns/' + TEST_TOPIC_FROM, '/my_ns/' + TEST_TOPIC_FROM),
+        ]
+        TestPublisher.do_test(test_topics, self.node)
 
 
 if __name__ == '__main__':
