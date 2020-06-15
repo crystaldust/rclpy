@@ -53,10 +53,11 @@ class TestPublisher(unittest.TestCase):
 
     @classmethod
     def do_test_topic_name(cls, test_topics, node):
-        """ Test the topic names of publishers created by the given node
+        """
+        Test the topic names of publishers created by the given node
+
         The node will create publishers with topic in test_topics, and then test if
         the publisher's topic_name property is equal to the expected value.
-
         Args:
             test_topics: A list of binary tuple in the form (topic, expected topic), the
             former will be passed to node.create_publisher and the latter will be compared
@@ -64,8 +65,7 @@ class TestPublisher(unittest.TestCase):
             node: The node used to create the publisher. The node's namespace will have
             an effect on the publisher's topic_name.
         """
-        for topic_tuple in test_topics:
-            topic, target_topic = topic_tuple
+        for topic, target_topic in test_topics:
             publisher = node.create_publisher(BasicTypes, topic, 0)
             assert publisher.topic_name == target_topic
             publisher.destroy()
