@@ -5,11 +5,11 @@ import ament_index_python as ament_index
 from .component_manager import ComponentManager
 
 
-RCLPY_COMPONENTS = 'rclpy_components'
+
 AMENT_INDEX_RESOURCE_PATH = 'share/ament_index/resource_index/rclpy_components/'
 
 
-def register_component_in_setuppy(package_name, rclpy_components):
+def rclpy_register_component(package_name, rclpy_components):
     """
     Register component in a setup.py file
 
@@ -35,7 +35,7 @@ def register_component_in_setuppy(package_name, rclpy_components):
         resource_name = str.split(resource_str, '::')[0].strip()
         entry_point_path = parts[1].strip()
 
-        content = '{};{}'.format(resource_str, entry_point_path)
+        content = '{};{}\n'.format(resource_str, entry_point_path)
         if resource_name in resources:
             resources[resource_name].append(content)
         else:
@@ -43,9 +43,15 @@ def register_component_in_setuppy(package_name, rclpy_components):
 
     res_folder = os.path.join(resource_path, AMENT_INDEX_RESOURCE_PATH)
     if not os.path.exists(res_folder):
-        os.mkdir(res_folder)
+        os.makedirs(res_folder)
 
+    # os.system('echo FFFFFF')
+    # print('ff')
     for resource_name, contents in resources.items():
         res_path = os.path.join(res_folder, resource_name)
+        # print(res_path)
+        # print('writing:')
+        # print(type(contents))
+        # print('to path', res_path)
         with open(res_path, 'w') as f:
             f.writelines(contents)
