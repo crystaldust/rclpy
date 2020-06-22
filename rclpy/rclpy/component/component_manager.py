@@ -1,11 +1,17 @@
 from rclpy.node import Node
 from composition_interfaces.srv import ListNodes, LoadNode, UnloadNode
+from ament_index_python import get_resource
+from importlib import import_module
+from rclpy.executors import Executor
+
+from . import RCLPY_COMPONENTS
 
 
 class ComponentManager(Node):
 
-    def __init__(self, executor):
-        super().__init__("component_manager")  # TODO Handle the py args equivalent to rclcpp 'NodeOptions'
+    def __init__(self, executor: Executor, *args, **kwargs):
+        # TODO Handle the py args equivalent to rclcpp 'NodeOptions'
+        super().__init__("component_manager", *args, **kwargs)
         self.executor = executor
         # Implement the 3 services described in
         # http://design.ros2.org/articles/roslaunch.html#command-line-arguments
@@ -13,22 +19,51 @@ class ComponentManager(Node):
         self.load_node_srv_ = self.create_service(LoadNode, "~/_container/load_node", self.on_load_node)
         self.unload_node_srv_ = self.create_service(UnloadNode, "~/_container/unload_node", self.on_unload_node)
 
-    def on_list_node(self, req, res):
-        # TODO The ros2cli component verb might be referred to
-        res.full_node_names = []
-        res.unique_ids = []
+        self.components = {}  # key: unique_id, value: full node name and component instance
+        self.unique_id_index = 0
+
+        self.executor.spin()
+
+    def gen_unique_id(self):
+        self.unique_id_index += 1
+        return self.unique_id_index
+
+    def on_list_node(self, req: ListNodes.Request, res: ListNodes.Response):
+        res.unique_ids = [int(key) for key in self.components.keys()]
+        res.full_node_names = [v[0] for v in self.components.values()]
 
         return res
 
     def on_load_node(self, req: LoadNode.Request, res: LoadNode.Response):
-        print('TODO IMPL on_load_node')
-        print('try to load node', req.node_name)
+        try:
+            # content example: composition::Talker;my_pkg.my_components:Talker
+            content, base_path = get_resource(RCLPY_COMPONENTS, req.package_name)
+            component_type, entry_point_path = str.split(content, ';')
 
+            module_path, class_name = [part.strip() for part in str.split(entry_point_path, ':')]
+            component_module = import_module(module_path)
+            component_cls = getattr(component_module, class_name)  # TODO Is there a better way to get the class?
+            component_instance = component_cls(class_name)
+            res.unique_id = self.gen_unique_id()
+            res.full_node_name = '/' + str.lower(class_name)
 
-        # self.executor.add_node()
-        pass
+            self.components[str(res.unique_id)] = (res.full_node_name, component_instance)
+            self.executor.add_node(component_instance)
+            res.success = True
+            return res
+        except Exception as e:
+            self.get_logger().error('Failed to load node %s' % e)
+            res.success = False
+            return res
 
-    def on_unload_node(self, req:UnloadNode.Request, res:UnloadNode.Response):
-        print('TODO IMPL on_unload_node')
-        print('try to unload node', req.node_name)
-        pass
+    def on_unload_node(self, req: UnloadNode.Request, res: UnloadNode.Response):
+        uid = str(req.unique_id)
+        if uid not in self.components:
+            res._error_message = 'No node found with unique_id: %s' % uid
+            res.success = False
+            return res
+
+        _, component_instance = self.components.pop(uid)
+        self.executor.remove_node(component_instance)
+        res.success = True
+        return res
