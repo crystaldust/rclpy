@@ -4,7 +4,18 @@ from ament_index_python import get_resource
 from importlib import import_module
 from rclpy.executors import Executor
 
-from . import RCLPY_COMPONENTS
+RCLPY_COMPONENTS = 'rclpy_components'
+
+
+def _get_entrypoint_from_component(package_name, component_content):
+    """
+    component_content is the file content, a single string with '\n'
+    """
+    for line in str.splitlines(component_content):
+        parts = str.split(line, ';')
+        if parts[0].strip() == package_name:
+            return parts[1].strip()
+    raise Exception("%s not found in the components" % package_name)
 
 
 class ComponentManager(Node):
@@ -38,9 +49,9 @@ class ComponentManager(Node):
         try:
             # content example: composition::Talker;my_pkg.my_components:Talker
             content, base_path = get_resource(RCLPY_COMPONENTS, req.package_name)
-            component_type, entry_point_path = str.split(content, ';')
+            entrypoint_path = _get_entrypoint_from_component(req.plugin_name, content)
 
-            module_path, class_name = [part.strip() for part in str.split(entry_point_path, ':')]
+            module_path, class_name = [part.strip() for part in str.split(entrypoint_path, ':')]
             component_module = import_module(module_path)
             component_cls = getattr(component_module, class_name)  # TODO Is there a better way to get the class?
             component_instance = component_cls(class_name)
