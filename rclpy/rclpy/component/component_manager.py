@@ -20,9 +20,9 @@ def _get_entrypoint_from_component(package_name, component_content):
 
 class ComponentManager(Node):
 
-    def __init__(self, executor: Executor, *args, **kwargs):
+    def __init__(self, executor: Executor, name="py_component_manager", *args, **kwargs):
         # TODO Handle the py args equivalent to rclcpp 'NodeOptions'
-        super().__init__("component_manager", *args, **kwargs)
+        super().__init__(name, *args, **kwargs)
         self.executor = executor
         # Implement the 3 services described in
         # http://design.ros2.org/articles/roslaunch.html#command-line-arguments
