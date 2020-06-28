@@ -1,8 +1,7 @@
 from rclpy.node import Node
 from composition_interfaces.srv import ListNodes, LoadNode, UnloadNode
-from ament_index_python import get_resource
-from importlib import import_module
 from rclpy.executors import Executor
+from importlib_metadata import entry_points
 
 RCLPY_COMPONENTS = 'rclpy_components'
 
@@ -46,26 +45,35 @@ class ComponentManager(Node):
         return res
 
     def on_load_node(self, req: LoadNode.Request, res: LoadNode.Response):
-        try:
-            # content example: composition::Talker;my_pkg.my_components:Talker
-            content, base_path = get_resource(RCLPY_COMPONENTS, req.package_name)
-            entrypoint_path = _get_entrypoint_from_component(req.plugin_name, content)
-
-            module_path, class_name = [part.strip() for part in str.split(entrypoint_path, ':')]
-            component_module = import_module(module_path)
-            component_cls = getattr(component_module, class_name)  # TODO Is there a better way to get the class?
-            component_instance = component_cls(class_name)
-            res.unique_id = self.gen_unique_id()
-            res.full_node_name = '/' + str.lower(class_name)
-
-            self.components[str(res.unique_id)] = (res.full_node_name, component_instance)
-            self.executor.add_node(component_instance)
-            res.success = True
-            return res
-        except Exception as e:
-            self.get_logger().error('Failed to load node %s' % e)
+        component_entry_points = entry_points().get(RCLPY_COMPONENTS, None)
+        if not component_entry_points:
+            self.get_logger().error('No rclpy components registered')
             res.success = False
             return res
+
+        component_entry_point = None
+        for ep in component_entry_points:
+            if ep.name == req.plugin_name:
+                component_entry_point = ep
+                break
+
+        if not component_entry_point:
+            self.get_logger().error('No rclpy component found by %s' % req.plugin_name)
+            res.success = False
+            return res
+
+        component_class = component_entry_point.load()
+        component_class_name = str.split(component_entry_point.value, ':')[1]
+        component = component_class(component_class_name)
+
+        # TODO Handle the node_name, node_namespace, and remapping rules.
+
+        res.unique_id = self.gen_unique_id()
+        res.full_node_name = '/' + str.lower(component_class_name)
+        self.components[str(res.unique_id)] = (res.full_node_name, component)
+        self.executor.add_node(component)
+        res.success = True
+        return res
 
     def on_unload_node(self, req: UnloadNode.Request, res: UnloadNode.Response):
         uid = str(req.unique_id)
