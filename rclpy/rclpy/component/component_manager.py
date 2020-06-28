@@ -2,9 +2,12 @@ from rclpy.node import Node
 from composition_interfaces.srv import ListNodes, LoadNode, UnloadNode
 from rclpy.executors import Executor
 from importlib_metadata import entry_points
+from rclpy.exceptions import InvalidNodeNameException, InvalidNamespaceException
+from rclpy.logging import get_logger
 
 RCLPY_COMPONENTS = 'rclpy_components'
 
+logger = get_logger('ComponentManager')
 
 def _get_entrypoint_from_component(package_name, component_content):
     """
@@ -47,7 +50,7 @@ class ComponentManager(Node):
     def on_load_node(self, req: LoadNode.Request, res: LoadNode.Response):
         component_entry_points = entry_points().get(RCLPY_COMPONENTS, None)
         if not component_entry_points:
-            self.get_logger().error('No rclpy components registered')
+            logger.error('No rclpy components registered')
             res.success = False
             return res
 
@@ -58,22 +61,34 @@ class ComponentManager(Node):
                 break
 
         if not component_entry_point:
-            self.get_logger().error('No rclpy component found by %s' % req.plugin_name)
+            logger.error('No rclpy component found by %s' % req.plugin_name)
             res.success = False
             return res
 
         component_class = component_entry_point.load()
-        node_name = req.node_name if req.node_name else str.split(component_entry_point.value, ':')[1]
-        component = component_class(node_name)
+        node_name = req.node_name if req.node_name else \
+            str.lower(str.split(component_entry_point.value, ':')[1])
 
-        # TODO Handle the node_name, node_namespace, and remapping rules.
+        try:
+            component = component_class(node_name, namespace=req.node_namespace)
 
-        res.unique_id = self.gen_unique_id()
-        res.full_node_name = '/' + str.lower(node_name)
-        self.components[str(res.unique_id)] = (res.full_node_name, component)
-        self.executor.add_node(component)
-        res.success = True
-        return res
+            # TODO Handle the node_name, node_namespace, and remapping rules.
+
+            res.unique_id = self.gen_unique_id()
+            res.full_node_name = '/{}'.format(node_name)
+            if req.node_namespace:
+                res.full_node_name = '/{}{}'.format(req.node_namespace, res.full_node_name)
+            self.components[str(res.unique_id)] = (res.full_node_name, component)
+            self.executor.add_node(component)
+            res.success = True
+            return res
+        except (InvalidNodeNameException, InvalidNamespaceException) as e:
+            error_message = str(e)
+            logger.error('Failed to load node: %s' % error_message)
+            res.success = False
+            res.error_message = error_message
+            return res
+
 
     def on_unload_node(self, req: UnloadNode.Request, res: UnloadNode.Response):
         uid = str(req.unique_id)
