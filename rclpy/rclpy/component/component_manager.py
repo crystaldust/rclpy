@@ -63,13 +63,13 @@ class ComponentManager(Node):
             return res
 
         component_class = component_entry_point.load()
-        component_class_name = str.split(component_entry_point.value, ':')[1]
-        component = component_class(component_class_name)
+        node_name = req.node_name if req.node_name else str.split(component_entry_point.value, ':')[1]
+        component = component_class(node_name)
 
         # TODO Handle the node_name, node_namespace, and remapping rules.
 
         res.unique_id = self.gen_unique_id()
-        res.full_node_name = '/' + str.lower(component_class_name)
+        res.full_node_name = '/' + str.lower(node_name)
         self.components[str(res.unique_id)] = (res.full_node_name, component)
         self.executor.add_node(component)
         res.success = True
