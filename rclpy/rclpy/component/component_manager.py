@@ -9,6 +9,7 @@ RCLPY_COMPONENTS = 'rclpy_components'
 
 logger = get_logger('ComponentManager')
 
+
 def _get_entrypoint_from_component(package_name, component_content):
     """
     component_content is the file content, a single string with '\n'
@@ -69,8 +70,15 @@ class ComponentManager(Node):
         node_name = req.node_name if req.node_name else \
             str.lower(str.split(component_entry_point.value, ':')[1])
 
+        params_dict = {}
+        if req.parameters:
+            params_dict['parameter_overrides'] = req.parameters
+
+        if req.node_namespace:
+            params_dict['namespace'] = req.node_namespace
+
         try:
-            component = component_class(node_name, namespace=req.node_namespace)
+            component = component_class(node_name, **params_dict)
 
             # TODO Handle the node_name, node_namespace, and remapping rules.
 
@@ -82,13 +90,12 @@ class ComponentManager(Node):
             self.executor.add_node(component)
             res.success = True
             return res
-        except (InvalidNodeNameException, InvalidNamespaceException) as e:
+        except (InvalidNodeNameException, InvalidNamespaceException, TypeError) as e:
             error_message = str(e)
             logger.error('Failed to load node: %s' % error_message)
             res.success = False
             res.error_message = error_message
             return res
-
 
     def on_unload_node(self, req: UnloadNode.Request, res: UnloadNode.Response):
         uid = str(req.unique_id)
