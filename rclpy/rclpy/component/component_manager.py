@@ -77,6 +77,12 @@ class ComponentManager(Node):
         if req.node_namespace:
             params_dict['namespace'] = req.node_namespace
 
+        if req.remap_rules:
+            params_dict['cli_args'] = ['--ros-args']
+            for rule in req.remap_rules:
+                params_dict['cli_args'].extend(['-r', rule])
+
+        # TODO Handle the priority of req.node_namespace and req.remap_rules '__ns:=<ns>'
         try:
             component = component_class(node_name, **params_dict)
 
@@ -84,6 +90,7 @@ class ComponentManager(Node):
 
             res.unique_id = self.gen_unique_id()
             res.full_node_name = '/{}'.format(node_name)
+
             if req.node_namespace:
                 res.full_node_name = '/{}{}'.format(req.node_namespace, res.full_node_name)
             self.components[str(res.unique_id)] = (res.full_node_name, component)
