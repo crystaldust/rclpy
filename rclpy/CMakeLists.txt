@@ -75,6 +75,12 @@ function(configure_python_c_extension_library _library_name)
   )
 endfunction()
 
+find_package(rosidl_default_generators REQUIRED)
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "rclpy/component/srv/SupportedComponentTypes.srv"
+  ADD_LINTER_TESTS
+)
+
 add_library(rclpy_common SHARED
   src/rclpy_common/src/common.c
   src/rclpy_common/src/handle.c
