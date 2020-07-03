@@ -22,6 +22,7 @@ find_package(rcl_yaml_param_parser REQUIRED)
 find_package(rcutils REQUIRED)
 find_package(rmw REQUIRED)
 find_package(rmw_implementation_cmake REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
 
 find_package(python_cmake_module REQUIRED)
 find_package(PythonExtra MODULE REQUIRED)
@@ -75,11 +76,11 @@ function(configure_python_c_extension_library _library_name)
   )
 endfunction()
 
-find_package(rosidl_default_generators REQUIRED)
-rosidl_generate_interfaces(${PROJECT_NAME}
-  "rclpy/component/srv/SupportedComponentTypes.srv"
-  ADD_LINTER_TESTS
-)
+#rosidl_generate_interfaces(${PROJECT_NAME}
+#  "rclpy/component/srv/SupportedComponentTypes.srv"
+#  ADD_LINTER_TESTS
+#)
+
 
 add_library(rclpy_common SHARED
   src/rclpy_common/src/common.c

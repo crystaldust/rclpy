@@ -4,7 +4,7 @@ from rclpy.executors import Executor
 from importlib_metadata import entry_points
 from rclpy.exceptions import InvalidNodeNameException, InvalidNamespaceException
 from rclpy.logging import get_logger
-from rclpy.component.srv import SupportedComponentTypes
+# from rclpy.component.srv import SupportedComponentTypes
 
 RCLPY_COMPONENTS = 'rclpy_components'
 
@@ -33,7 +33,7 @@ class ComponentManager(Node):
         self.list_node_srv_ = self.create_service(ListNodes, "~/_container/list_nodes", self.on_list_node)
         self.load_node_srv_ = self.create_service(LoadNode, "~/_container/load_node", self.on_load_node)
         self.unload_node_srv_ = self.create_service(UnloadNode, "~/_container/unload_node", self.on_unload_node)
-        self.unload_node_srv_ = self.create_service(Empty, "~/_container/supported_types", self.on_supported_types)
+        # self.unload_node_srv_ = self.create_service(Empty, "~/_container/supported_types", self.on_supported_types)
 
         self.components = {}  # key: unique_id, value: full node name and component instance
         self.unique_id_index = 0
@@ -118,6 +118,6 @@ class ComponentManager(Node):
         res.success = True
         return res
 
-    def on_supported_types(self, req: SupportedComponentTypes.Request, res: SupportedComponentTypes.Response):
-        res.supported_types = ['rclpy_components']
-        return res
+    # def on_supported_types(self, req: SupportedComponentTypes.Request, res: SupportedComponentTypes.Response):
+    #     res.supported_types = ['rclpy_components']
+    #     return res
