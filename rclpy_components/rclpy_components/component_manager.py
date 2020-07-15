@@ -41,7 +41,28 @@ class ComponentManager(Node):
         self.components = {}  # key: unique_id, value: full node name and component instance
         self.unique_id_index = 0
 
-        self.executor.spin()
+    def _parse_remap_rules(self, remap_rules):
+        """
+        Parse name and namespace from remap rules
+
+        This is a temporary method, when node.get_fully_qualified_name is ready, it should be removed.
+        """
+        import re
+        name, ns = None, None
+        name_pattern, ns_pattern = re.compile('__node:=(.*)'), re.compile('__ns:=(.*)')
+        for rule in remap_rules:
+            name_result = name_pattern.search(rule)
+            if name_result:
+                name = name_result.group(1)
+            ns_result = ns_pattern.search(rule)
+            if ns_result:
+                # There might be leading slash
+                # Leave the ugly here, it will be removed.
+                ns = ns_result.group(1).lstrip('/')
+
+            if name and ns:
+                break
+        return name, ns
 
     def gen_unique_id(self):
         self.unique_id_index += 1
@@ -72,10 +93,8 @@ class ComponentManager(Node):
             return res
 
         component_class = component_entry_point.load()
-        node_name = req.node_name if req.node_name else \
-            str.lower(str.split(component_entry_point.value, ':')[1])
 
-        params_dict = {'use_global_arguments': False}
+        params_dict = {'use_global_arguments': False, 'context': self.context}
         if req.parameters:
             params_dict['parameter_overrides'] = req.parameters
 
@@ -86,16 +105,20 @@ class ComponentManager(Node):
             params_dict['cli_args'] = ['--ros-args']
             for rule in req.remap_rules:
                 params_dict['cli_args'].extend(['-r', rule])
-
         try:
+            # TODO Assign the full_node_name with node.get_fully_qualified_name, which will handle priority of ns, name
+            remapped_name, remapped_ns = self._parse_remap_rules(req.remap_rules)
+            node_name = remapped_name if remapped_name else req.node_name
+            if not node_name:
+                node_name = str.lower(str.split(component_entry_point.value, ':')[1])
+            res.full_node_name = '/{}'.format(node_name)
+            namespace = remapped_ns if remapped_ns else req.node_namespace
+            if namespace:
+                res.full_node_name = '/{}{}'.format(namespace, res.full_node_name)
+
             logger.info('Instantiating {} with {}, {}'.format(component_entry_point.value, node_name, params_dict))
             component = component_class(node_name, **params_dict)
-
             res.unique_id = self.gen_unique_id()
-            # TODO Assign the full_node_name with node.get_fully_qualified_name
-            res.full_node_name = '/{}'.format(node_name)
-            if req.node_namespace:
-                res.full_node_name = '/{}{}'.format(req.node_namespace, res.full_node_name)
             res.success = True
             self.components[str(res.unique_id)] = (res.full_node_name, component)
             self.executor.add_node(component)
@@ -105,6 +128,11 @@ class ComponentManager(Node):
             logger.error('Failed to load node: %s' % error_message)
             res.success = False
             res.error_message = error_message
+            return res
+        except Exception as e:
+            logger.error('Failed to load node: %s' % str(e))
+            res.success = False
+            res.error_message = 'Unexpected error, please check the component container log.'
             return res
 
     def on_unload_node(self, req: UnloadNode.Request, res: UnloadNode.Response):
