@@ -27,7 +27,6 @@ RCLPY_COMPONENTS = 'rclpy_components'
 class ComponentManager(Node):
 
     def __init__(self, executor: Executor, name="py_component_manager", **kwargs):
-        # TODO Handle the py args equivalent to rclcpp 'NodeOptions'
         super().__init__(name, **kwargs)
         self.executor = executor
         # Implement the 3 services described in
@@ -55,8 +54,8 @@ class ComponentManager(Node):
     def on_load_node(self, req: LoadNode.Request, res: LoadNode.Response):
         component_entry_points = entry_points().get(RCLPY_COMPONENTS, None)
         if not component_entry_points:
-            self.get_logger().error('No rclpy components registered')
             res.success = False
+            res.error_message = 'No rclpy components registered'
             return res
 
         component_entry_point = None
@@ -66,8 +65,8 @@ class ComponentManager(Node):
                 break
 
         if not component_entry_point:
-            self.get_logger().error(f'No rclpy component found by {req.plugin_name}')
             res.success = False
+            res.error_message = f'No rclpy component found by {req.plugin_name}'
             return res
 
         component_class = component_entry_point.load()
@@ -101,7 +100,7 @@ class ComponentManager(Node):
             return res
         except (InvalidNodeNameException, InvalidNamespaceException, TypeError) as e:
             error_message = str(e)
-            self.get_logger().error('Failed to load node: %s' % error_message)
+            self.get_logger().error(f'Failed to load node: {error_message}')
             res.success = False
             res.error_message = error_message
             return res
@@ -109,8 +108,8 @@ class ComponentManager(Node):
     def on_unload_node(self, req: UnloadNode.Request, res: UnloadNode.Response):
         uid = str(req.unique_id)
         if uid not in self.components:
-            res._error_message = 'No node found with unique_id: %s' % uid
             res.success = False
+            res.error_message = f'No node found with unique_id: {uid}'
             return res
 
         _, component_instance = self.components.pop(uid)
