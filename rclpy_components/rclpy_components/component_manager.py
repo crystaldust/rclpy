@@ -14,7 +14,6 @@
 
 from rclpy.node import Node
 from rclpy.executors import Executor
-from rclpy.logging import get_logger
 from rclpy.exceptions import InvalidNodeNameException, InvalidNamespaceException
 from composition_interfaces.srv import ListNodes, LoadNode, UnloadNode
 try:
@@ -23,7 +22,6 @@ except ImportError:
     from importlib_metadata import entry_points
 
 RCLPY_COMPONENTS = 'rclpy_components'
-logger = get_logger('ComponentManager')
 
 
 class ComponentManager(Node):
@@ -34,14 +32,15 @@ class ComponentManager(Node):
         self.executor = executor
         # Implement the 3 services described in
         # http://design.ros2.org/articles/roslaunch.html#command-line-arguments
-        self.list_node_srv_ = self.create_service(ListNodes, "~/_container/list_nodes", self.on_list_node)
-        self.load_node_srv_ = self.create_service(LoadNode, "~/_container/load_node", self.on_load_node)
-        self.unload_node_srv_ = self.create_service(UnloadNode, "~/_container/unload_node", self.on_unload_node)
+        self._list_node_srv = self.create_service(
+            ListNodes, "~/_container/list_nodes", self.on_list_node)
+        self._load_node_srv = self.create_service(
+            LoadNode, "~/_container/load_node", self.on_load_node)
+        self._unload_node_srv = self.create_service(
+            UnloadNode, "~/_container/unload_node", self.on_unload_node)
 
         self.components = {}  # key: unique_id, value: full node name and component instance
         self.unique_id_index = 0
-
-        self.executor.spin()
 
     def gen_unique_id(self):
         self.unique_id_index += 1
@@ -56,7 +55,7 @@ class ComponentManager(Node):
     def on_load_node(self, req: LoadNode.Request, res: LoadNode.Response):
         component_entry_points = entry_points().get(RCLPY_COMPONENTS, None)
         if not component_entry_points:
-            logger.error('No rclpy components registered')
+            self.get_logger().error('No rclpy components registered')
             res.success = False
             return res
 
@@ -67,7 +66,7 @@ class ComponentManager(Node):
                 break
 
         if not component_entry_point:
-            logger.error('No rclpy component found by %s' % req.plugin_name)
+            self.get_logger().error(f'No rclpy component found by {req.plugin_name}')
             res.success = False
             return res
 
@@ -75,7 +74,7 @@ class ComponentManager(Node):
         node_name = req.node_name if req.node_name else \
             str.lower(str.split(component_entry_point.value, ':')[1])
 
-        params_dict = {'use_global_arguments': False}
+        params_dict = {'use_global_arguments': False, 'context': self.context}
         if req.parameters:
             params_dict['parameter_overrides'] = req.parameters
 
@@ -88,21 +87,21 @@ class ComponentManager(Node):
                 params_dict['cli_args'].extend(['-r', rule])
 
         try:
-            logger.info('Instantiating {} with {}, {}'.format(component_entry_point.value, node_name, params_dict))
+            self.get_logger().info(
+                f'Instantiating {component_entry_point.value} with {node_name}, {params_dict}')
             component = component_class(node_name, **params_dict)
-
             res.unique_id = self.gen_unique_id()
             # TODO Assign the full_node_name with node.get_fully_qualified_name
-            res.full_node_name = '/{}'.format(node_name)
+            res.full_node_name = f'/{node_name}'
             if req.node_namespace:
-                res.full_node_name = '/{}{}'.format(req.node_namespace, res.full_node_name)
+                res.full_node_name = f'/{req.node_namespace}{res.full_node_name}'
             res.success = True
             self.components[str(res.unique_id)] = (res.full_node_name, component)
             self.executor.add_node(component)
             return res
         except (InvalidNodeNameException, InvalidNamespaceException, TypeError) as e:
             error_message = str(e)
-            logger.error('Failed to load node: %s' % error_message)
+            self.get_logger().error('Failed to load node: %s' % error_message)
             res.success = False
             res.error_message = error_message
             return res
