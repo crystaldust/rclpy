@@ -92,6 +92,8 @@ class ComponentManager(Node):
             res.unique_id = self.gen_unique_id()
             # TODO Assign the full_node_name with node.get_fully_qualified_name
             res.full_node_name = f'/{node_name}'
+            print(f'[DEBUG] replace res.full_node_name({res.full_node_name}) with '
+                  f'{component.get_fully_qualified_name}')
             if req.node_namespace:
                 res.full_node_name = f'/{req.node_namespace}{res.full_node_name}'
             res.success = True
