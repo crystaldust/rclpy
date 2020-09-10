@@ -14,7 +14,7 @@
 
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
-from rclpy.component import ComponentManager
+from .component_manager import ComponentManager
 
 
 def main():
