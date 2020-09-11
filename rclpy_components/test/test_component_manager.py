@@ -19,52 +19,93 @@ import rclpy
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.callback_groups import ReentrantCallbackGroup
 from test_msgs.msg import BasicTypes
+from rclpy.node import Node
+from rclpy.context import Context
 from rclpy_components.component_manager import ComponentManager
 from rclpy.executors import SingleThreadedExecutor, MultiThreadedExecutor
 from composition_interfaces.srv import ListNodes, LoadNode, UnloadNode
 from threading import Thread
-
+from multiprocessing import Process
 
 class TestComponentManager(unittest.TestCase):
     single_threaded_executor: SingleThreadedExecutor = None
-    multi_threaded_executor = None
-    component_manager = None
-    helper_node = None
-    context = None
+    multi_threaded_executor: MultiThreadedExecutor = None
+    component_manager: ComponentManager = None
+    helper_node: Node = None
+    context: Context = None
     composition_clients = None
+
+    background_process: Process = None
+    foreground_process: Process = None
+
+    @classmethod
+    def _start_component_manager(cls):
+        rclpy.init()
+        single_threaded_executor = SingleThreadedExecutor()
+        component_manager = ComponentManager(single_threaded_executor, 'TestComponentManager')
+        single_threaded_executor.add_node(component_manager)
+        try:
+            single_threaded_executor.spin()
+        except Exception as e:
+            print(e)
+            pass
+
+        component_manager.destroy_node()
+        rclpy.shutdown()
+
+    # @classmethod
+    # def _call_load_service(cls):
+    #     rclpy.init()
+    #     node = rclpy.create_node('load_component_node')
+    #     cli = node.create_client(LoadNode, "/TestComponentManager/_container/load_node")
+    #     req = LoadNode.Request()
+    #     req.package_name
+
 
     @classmethod
     def setUpClass(cls):
-        cls.context = rclpy.context.Context()
-        rclpy.init(context=cls.context)
-        cls.single_threaded_executor = SingleThreadedExecutor(context=cls.context)
-        cls.multi_threaded_executor = MultiThreadedExecutor(context=cls.context)
-        cls.component_manager = ComponentManager(cls.single_threaded_executor,
-                                                 'TestComponentManager',
-                                                 context=cls.context)
+        print('setupClass')
+        def run_component_manager():
+            rclpy.init()
+            single_threaded_executor = SingleThreadedExecutor()
+            component_manager = ComponentManager(single_threaded_executor, 'TestComponentManager')
+            single_threaded_executor.add_node(component_manager)
+            try:
+                single_threaded_executor.spin()
+            except Exception as e:
+                print(e)
+                pass
 
-        cls.single_threaded_executor.add_node(cls.component_manager)
+            component_manager.destroy_node()
+            rclpy.shutdown()
+        cls.background_process = Process(target=run_component_manager)
+        cls.background_process.start()
+        # cls.action_service_map = {
+        #     'load_node': LoadNode,
+        #     'unload_node': UnloadNode,
+        #     'list_nodes': ListNodes,
+        # }
+        #
+        # cls.composition_clients = {}
+        # for action, service in cls.action_service_map.items():
+        #     cls.composition_clients[action] = cls.helper_node.create_client(
+        #         service,
+        #         '{}/_container/{}'.format(cls.component_manager.get_name(), action)
+        #     )
+        #
+        # cls.background_process = Process(target=cls.single_threaded_executor.spin)
 
-        cls.helper_node = rclpy.create_node('helper', context=cls.context)
-        cls.action_service_map = {
-            'load_node': LoadNode,
-            'unload_node': UnloadNode,
-            'list_nodes': ListNodes,
-        }
-
-        cls.composition_clients = {}
-        for action, service in cls.action_service_map.items():
-            cls.composition_clients[action] = cls.helper_node.create_client(
-                service,
-                '{}/_container/{}'.format(cls.component_manager.get_name(), action)
-            )
 
     @classmethod
     def tearDownClass(cls):
-        cls.single_threaded_executor.remove_node(cls.component_manager)
-        cls.component_manager.destroy_node()
-
-        rclpy.shutdown(context=cls.context)
+        print('teardown class')
+        cls.background_process.terminate()
+        cls.background_process.kill()
+        # cls.single_threaded_executor.remove_node(cls.component_manager)
+        # cls.component_manager.destroy_node()
+        #
+        # rclpy.shutdown(context=cls.context)
+        # cls.background_process.terminate()
 
     @classmethod
     def _get_res(cls, req, client_key):
@@ -89,20 +130,42 @@ class TestComponentManager(unittest.TestCase):
         return cls._get_res(req, client_key)
 
     def test_fuck(self):
-        TestComponentManager.single_threaded_executor.spin_once(3)
-        print('after spin once')
+        print('test_fuck')
 
-        req = LoadNode.Request()
-        req.package_name = 'py_composition'
-        req.plugin_name = 'py_composition::Listener'
+        def foo():
+            req = LoadNode.Request()
+            req.package_name = 'py_composition'
+            req.plugin_name = 'py_composition::Listener'
+            c = rclpy.context.Context()
+            rclpy.init()
+            node = rclpy.create_node('xxxhelper')
+            print('rclpy.create_node with cls.context')
+            cli = node.create_client(LoadNode, "/TestComponentManager/_container/load_node")
+
+            if not cli.wait_for_service(timeout_sec=5.0):
+                raise RuntimeError('no load service found in /PyComponentManager')
+
+            future = cli.call_async(req)
+
+            # while rclpy.ok():
+                # rclpy.spin_once()
+            print('spin until')
+            rclpy.spin_until_future_complete(node, future)
+            print(future.result())
+            res: LoadNode.Response = future.result()
+            print(f'res.full_node_name: {res.full_node_name}')
+            assert res.full_node_name == '/listener'
+
+            node.destroy_node()
+            rclpy.shutdown()
+
+        foo()
+        # p = Process(target=foo)
+        # p.start()
+        # p.join()
+        # print('p finished')
 
 
-        rclpy.init()
-        node = rclpy.create_node("fuck")
-        cli = node.create_client(LoadNode, "/TestComponentManager/_container/load_node")
-        future = cli.call_async(req)
-        rclpy.spin_until_future_complete(TestComponentManager.helper_node, future)
-        print('future:', future)
 
     def test_load_node(self):
         return
