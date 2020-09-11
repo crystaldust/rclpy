@@ -90,12 +90,7 @@ class ComponentManager(Node):
                 f'Instantiating {component_entry_point.value} with {node_name}, {params_dict}')
             component = component_class(node_name, **params_dict)
             res.unique_id = self.gen_unique_id()
-            # TODO Assign the full_node_name with node.get_fully_qualified_name
-            res.full_node_name = f'/{node_name}'
-            print(f'[DEBUG] replace res.full_node_name({res.full_node_name}) with '
-                  f'{component.get_fully_qualified_name}')
-            if req.node_namespace:
-                res.full_node_name = f'/{req.node_namespace}{res.full_node_name}'
+            res.full_node_name = component.get_fully_qualified_name()
             res.success = True
             self.components[str(res.unique_id)] = (res.full_node_name, component)
             self.executor.add_node(component)
