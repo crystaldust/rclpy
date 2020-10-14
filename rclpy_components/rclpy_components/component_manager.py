@@ -21,8 +21,6 @@ try:
 except ImportError:
     from importlib_metadata import entry_points
 
-RCLPY_COMPONENTS = 'rclpy_components'
-
 
 class ComponentManager(Node):
 
@@ -52,7 +50,7 @@ class ComponentManager(Node):
         return res
 
     def on_load_node(self, req: LoadNode.Request, res: LoadNode.Response):
-        component_entry_points = entry_points().get(RCLPY_COMPONENTS, None)
+        component_entry_points = entry_points().get('rclpy_components', None)
         if not component_entry_points:
             res.success = False
             res.error_message = 'No rclpy components registered'
